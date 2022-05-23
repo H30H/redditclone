@@ -1,0 +1,432 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>database: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">redditclone/pkg/database/databasePost.go (0.0%)</option>
+				
+				<option value="file1">redditclone/pkg/database/databaseUser.go (41.2%)</option>
+				
+				<option value="file2">redditclone/pkg/database/repoPost.go (100.0%)</option>
+				
+				<option value="file3">redditclone/pkg/database/repoUser.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package database
+
+import (
+        "context"
+        "fmt"
+        "redditclone/pkg/post"
+
+        "go.mongodb.org/mongo-driver/bson"
+        "go.mongodb.org/mongo-driver/mongo"
+        "go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type DatabasePost interface {
+        Insert(pst post.Post) error
+        Find(id uint64, pst *post.Post) error
+        GetAll(filter interface{}, opts ...*options.FindOptions) ([]*post.Post, error)
+        Replace(pst post.Post) error
+        Delete(id uint64) error
+}
+
+type DatabasePostMongo struct {
+        database *mongo.Collection
+}
+
+func InitDatabasePost(path, databaseName, collenctionName string) (*DatabasePostMongo, error) <span class="cov0" title="0">{
+        clientOptions := options.Client().ApplyURI(path)
+        client, errConnect := mongo.Connect(context.TODO(), clientOptions)
+        if errConnect != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("mongodb: can`t connect: %w", errConnect)
+        }</span>
+        <span class="cov0" title="0">errPing := client.Ping(context.TODO(), nil)
+        if errPing != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("mongodb: can`t ping: %w", errPing)
+        }</span>
+        <span class="cov0" title="0">collection := client.Database(databaseName).Collection(collenctionName)
+        if collection == nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf(`mongodb: no such collection (has "nil" collection)`)
+        }</span>
+        <span class="cov0" title="0">return &amp;DatabasePostMongo{
+                database: collection,
+        }, nil</span>
+}
+
+func (d *DatabasePostMongo) Close() error <span class="cov0" title="0">{
+        return d.database.Database().Client().Disconnect(context.TODO())
+}</span>
+
+func (d *DatabasePostMongo) Insert(pst post.Post) (err error) <span class="cov0" title="0">{
+        _, err = d.database.InsertOne(context.TODO(), pst)
+        return
+}</span>
+
+func (d *DatabasePostMongo) Find(id uint64, pst *post.Post) (err error) <span class="cov0" title="0">{
+        return d.database.FindOne(context.TODO(), bson.M{"id": id}).Decode(pst)
+}</span>
+
+func (d *DatabasePostMongo) GetAll(filter interface{}, opts ...*options.FindOptions) (posts []*post.Post, err error) <span class="cov0" title="0">{
+        cur, err := d.database.Find(context.TODO(), filter, opts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">err = cur.All(context.TODO(), &amp;posts)
+        return</span>
+}
+
+func (d *DatabasePostMongo) Replace(pst post.Post) (err error) <span class="cov0" title="0">{
+        _, err = d.database.ReplaceOne(context.TODO(), bson.M{"id": pst.ID}, pst)
+        return
+}</span>
+
+func (d *DatabasePostMongo) Delete(id uint64) (err error) <span class="cov0" title="0">{
+        _, err = d.database.DeleteOne(context.TODO(), bson.M{"id": id})
+        return
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package database
+
+import (
+        "database/sql"
+        "fmt"
+        "redditclone/pkg/user"
+
+        _ "github.com/go-sql-driver/mysql"
+)
+
+type DatabaseUser struct {
+        database *sql.DB
+}
+
+func InitDatabaseUser(path, databaseName string) (*DatabaseUser, error) <span class="cov0" title="0">{
+        dsn := path + "/" + databaseName
+        db, errOpen := sql.Open("mysql", dsn)
+        if errOpen != nil </span><span class="cov0" title="0">{
+                return nil, errOpen
+        }</span>
+        <span class="cov0" title="0">db.SetMaxOpenConns(100)
+        errConnect := db.Ping()
+        if errConnect != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("ping: %w", errConnect)
+        }</span>
+        <span class="cov0" title="0">return &amp;DatabaseUser{database: db}, nil</span>
+}
+
+func (d *DatabaseUser) Close() error <span class="cov0" title="0">{
+        return d.database.Close()
+}</span>
+
+func (d *DatabaseUser) Add(usr user.User) (id int64, err error) <span class="cov8" title="1">{
+        result, err := d.database.Exec(
+                "INSERT INTO users (`username`, `password`) VALUES (?, ?)",
+                usr.Username,
+                usr.PasswordHash,
+        )
+        if err == nil </span><span class="cov8" title="1">{
+                id, err = result.LastInsertId()
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (d *DatabaseUser) Get(username string) (usr user.User, err error) <span class="cov8" title="1">{
+        row := d.database.QueryRow("SELECT username, password, user_id FROM users WHERE username = ? LIMIT 1", username)
+        err = row.Scan(&amp;usr.Username, &amp;usr.PasswordHash, &amp;usr.UserID)
+        return
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package database
+
+import (
+        "encoding/json"
+        "fmt"
+        "redditclone/pkg/post"
+        "redditclone/pkg/user"
+        "sync"
+
+        "go.mongodb.org/mongo-driver/bson"
+        "go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type PostRepo interface {
+        Lock(id uint64) bool
+        Unlock(id uint64) bool
+        Add(pst *post.Post) (err error)
+        Find(id uint64) (ok bool)
+        Get(id uint64) (pst post.Post, err error)
+        Update(pst post.Post) (err error)
+        Remove(id uint64) bool
+        ToJson(category, username string) ([]byte, error)
+}
+
+type PostRepoStruct struct {
+        users      *DatabaseUser
+        data       DatabasePost
+        mx         *sync.Mutex
+        postsMuxes map[uint64]*sync.Mutex
+        idGetter   uint64
+}
+
+func NewPostRepo(databasePost DatabasePost, databaseUser *DatabaseUser) (*PostRepoStruct, error) <span class="cov8" title="1">{
+        mx := map[uint64]*sync.Mutex{}
+        posts, err := databasePost.GetAll(bson.M{}, options.Find())
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">var maxID uint64
+        for _, pst := range posts </span><span class="cov8" title="1">{
+                mx[pst.ID] = &amp;sync.Mutex{}
+                if maxID &lt; pst.ID </span><span class="cov8" title="1">{
+                        maxID = pst.ID
+                }</span>
+        }
+        <span class="cov8" title="1">return &amp;PostRepoStruct{
+                users:      databaseUser,
+                data:       databasePost,
+                mx:         &amp;sync.Mutex{},
+                postsMuxes: mx,
+                idGetter:   maxID,
+        }, nil</span>
+}
+
+func (d *PostRepoStruct) Lock(id uint64) bool <span class="cov8" title="1">{
+        mu, ok := d.postsMuxes[id]
+        if !ok </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">mu.Lock()
+        if !d.Find(id) </span><span class="cov8" title="1">{
+                mu.Unlock()
+                return false
+        }</span>
+        <span class="cov8" title="1">return true</span>
+}
+
+func (d *PostRepoStruct) Unlock(id uint64) bool <span class="cov8" title="1">{
+        mu, ok := d.postsMuxes[id]
+        if !ok </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">mu.Unlock()
+        return true</span>
+}
+
+func (d *PostRepoStruct) Add(pst *post.Post) (err error) <span class="cov8" title="1">{
+        if pst == nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("nil pointer post")
+        }</span>
+        <span class="cov8" title="1">d.mx.Lock()
+        defer d.mx.Unlock()
+        d.idGetter++
+        pst.ID = d.idGetter
+        err = d.data.Insert(*pst)
+        if err != nil </span><span class="cov8" title="1">{
+                d.idGetter--
+                return err
+        }</span>
+        <span class="cov8" title="1">d.postsMuxes[pst.ID] = &amp;sync.Mutex{}
+        return</span>
+}
+
+func (d *PostRepoStruct) Find(id uint64) (ok bool) <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        var pst post.Post
+        err := d.data.Find(id, &amp;pst)
+        return err == nil
+}</span>
+
+func (d *PostRepoStruct) Get(id uint64) (pst post.Post, err error) <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        err = d.data.Find(id, &amp;pst)
+        return
+}</span>
+
+func (d *PostRepoStruct) Update(pst post.Post) (err error) <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        err = d.data.Replace(pst)
+        return
+}</span>
+
+func (d *PostRepoStruct) Remove(id uint64) bool <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        err := d.data.Delete(id)
+        if err != nil </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">delete(d.postsMuxes, id)
+        return true</span>
+}
+
+func (d *PostRepoStruct) getUserID(username string) int64 <span class="cov8" title="1">{
+        usr, err := d.users.Get(username)
+        if err != nil </span><span class="cov8" title="1">{
+                return -1
+        }</span>
+        <span class="cov8" title="1">return usr.UserID</span>
+}
+
+func (d *PostRepoStruct) ToJson(category, username string) ([]byte, error) <span class="cov8" title="1">{
+        findOptions := options.Find()
+        findOptions.SetSort(bson.M{"score": -1})
+        filter := bson.M{}
+        if category != "" </span><span class="cov8" title="1">{
+                filter["category"] = category
+        }</span>
+        <span class="cov8" title="1">if username != "" </span><span class="cov8" title="1">{
+                filter["author"] = user.User{Username: username, UserID: d.getUserID(username)}
+        }</span>
+        <span class="cov8" title="1">resArr, err := d.data.GetAll(filter, findOptions)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">res, errMarshal := json.Marshal(resArr)
+        return res, errMarshal</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package database
+
+import (
+        "redditclone/pkg/user"
+        "sync"
+)
+
+type UserRepo interface {
+        Add(user *user.User) (err error)
+        Find(username string) (user.User, bool)
+}
+
+type UserRepoStruct struct {
+        data *DatabaseUser
+        mx   *sync.Mutex
+}
+
+func NewUserRepo(databaseUser *DatabaseUser) *UserRepoStruct <span class="cov8" title="1">{
+        return &amp;UserRepoStruct{
+                data: databaseUser,
+                mx:   &amp;sync.Mutex{},
+        }
+}</span>
+
+func (d *UserRepoStruct) Add(user *user.User) (err error) <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        userID, err := d.data.Add(*user)
+        if err == nil </span><span class="cov8" title="1">{
+                user.UserID = userID
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+func (d *UserRepoStruct) Find(username string) (user.User, bool) <span class="cov8" title="1">{
+        d.mx.Lock()
+        defer d.mx.Unlock()
+        usr, err := d.data.Get(username)
+        if err != nil </span><span class="cov8" title="1">{
+                return user.User{}, false
+        }</span>
+        <span class="cov8" title="1">return usr, true</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

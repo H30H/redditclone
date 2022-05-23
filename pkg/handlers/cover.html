@@ -1,0 +1,816 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>handlers: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">redditclone/pkg/handlers/handlersComment.go (93.5%)</option>
+				
+				<option value="file1">redditclone/pkg/handlers/handlersPost.go (96.5%)</option>
+				
+				<option value="file2">redditclone/pkg/handlers/handlersUser.go (84.6%)</option>
+				
+				<option value="file3">redditclone/pkg/handlers/handlersVotes.go (98.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package handlers
+
+import (
+        "encoding/json"
+        "fmt"
+        "io/ioutil"
+        "net/http"
+        "redditclone/pkg/comment"
+        "redditclone/pkg/errors"
+        "redditclone/pkg/frontendMessages"
+        "redditclone/pkg/middleware"
+        "redditclone/pkg/token"
+        "redditclone/pkg/user"
+        "time"
+
+        "github.com/gorilla/mux"
+)
+
+func (h *PostHandler) CommentAdd(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        body, _ := ioutil.ReadAll(r.Body)
+        vars := mux.Vars(r)
+        id, errGet := token.GetMapItemUint64(vars, "post_id")
+        if errGet != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAddComment: %w", errors.ErrRequest{Err: errGet}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">usr, ok := r.Context().Value(middleware.UserContextKey).(user.User)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.UserContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">type readComment struct {
+                Body string `json:"comment"`
+        }
+        readCmt := readComment{}
+        errUnmarchal := json.Unmarshal(body, &amp;readCmt)
+        if errUnmarchal != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAddComment: %w", errors.ErrUnmarshalRequest{Err: errUnmarchal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">if readCmt.Body == "" || len(readCmt.Body) &gt;= 2000 </span><span class="cov8" title="1">{
+                var err frontendMessages.ErrorMessage
+                if readCmt.Body == "" </span><span class="cov8" title="1">{
+                        err = frontendMessages.ErrorMessage{
+                                Location: "body",
+                                Param:    "comment",
+                                Message:  "is required",
+                        }
+                }</span> else<span class="cov8" title="1"> {
+                        err = frontendMessages.ErrorMessage{
+                                Location: "body",
+                                Param:    "comment",
+                                Message:  "must be at most 2000 characters long",
+                        }
+                }</span>
+                <span class="cov8" title="1">res, errMarshal := json.Marshal(frontendMessages.Error{Errors: []frontendMessages.ErrorMessage{err}})
+                if errMarshal != nil </span><span class="cov0" title="0">{
+                        errors.SendHttpError(
+                                h.Logger, w,
+                                fmt.Errorf("postAddComment: %w", errors.ErrMarshal{Err: errMarshal}),
+                        )
+                        return
+                }</span>
+                <span class="cov8" title="1">http.Error(w, string(res), http.StatusUnprocessableEntity)
+                return</span>
+        }
+        <span class="cov8" title="1">if !h.PostRepo.Lock(id) </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "post not found",
+                        http.StatusNotFound,
+                        h.Logger, "postAddComment",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst, errGet := h.PostRepo.Get(id)
+        if errGet != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(id)
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAddComment: %w", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">cmt := comment.Comment{
+                Author: usr,
+                Body:   readCmt.Body,
+                ID:     pst.GetID(),
+                Time:   time.Now().Format(time.RFC3339),
+        }
+        pst.Comments = append(pst.Comments, cmt)
+        errUpdate := h.PostRepo.Update(pst)
+        h.PostRepo.Unlock(id)
+        if errUpdate != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAddComment: %w", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pstJson, err := json.Marshal(pst)
+        if err != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAddComment: %w", errors.ErrMarshal{Err: err}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(pstJson)</span>
+}
+
+func (h *PostHandler) CommentRemove(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        idPost, errIdPost := token.GetMapItemUint64(vars, "post_id")
+        if errIdPost != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("PostRemoveComment: %W", errIdPost),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">idComment, errIdComment := token.GetMapItemUint64(vars, "comment_id")
+        if errIdComment != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("PostRemoveComment: %W", errIdComment),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">usr, ok := r.Context().Value(middleware.UserContextKey).(user.User)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.UserContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">if !h.PostRepo.Lock(idPost) </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "post not found",
+                        http.StatusNotFound,
+                        h.Logger, "PostRemoveComment",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst, _ := h.PostRepo.Get(idPost)
+        flag := true
+        for i, cmt := range pst.Comments </span><span class="cov8" title="1">{
+                if cmt.ID == idComment </span><span class="cov8" title="1">{
+                        if cmt.Author.UserID != usr.UserID || cmt.Author.Username != usr.Username </span><span class="cov8" title="1">{
+                                h.Logger.Errorf("PostRemoveComment: can`t remove comment: Author: {Username: %s, UserID: %d}, User: {Username: %s, UserID: %d}, commeniID: %d",
+                                        cmt.Author.Username, cmt.Author.UserID, usr.Username, usr.UserID, idComment,
+                                )
+                                frontendMessages.SendMessage(w,
+                                        "this comment doesn't belong to this user",
+                                        http.StatusNotFound,
+                                        h.Logger, "PostRemoveComment",
+                                )
+                                h.PostRepo.Unlock(idPost)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">pst.Comments = token.RemoveInArr(pst.Comments, uint(i))
+                        flag = false
+                        errUpdate := h.PostRepo.Update(pst)
+                        if errUpdate != nil </span><span class="cov8" title="1">{
+                                h.PostRepo.Unlock(idPost)
+                                errors.SendHttpError(
+                                        h.Logger, w,
+                                        fmt.Errorf("postRemoveComment: %w", errUpdate),
+                                )
+                                return
+                        }</span>
+                        <span class="cov8" title="1">break</span>
+                }
+        }
+        <span class="cov8" title="1">h.PostRepo.Unlock(idPost)
+        if flag </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "comment not found",
+                        http.StatusNotFound,
+                        h.Logger, "PostRemoveComment",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">res, errMarshal := json.Marshal(pst)
+        if errMarshal != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRemoveComment: %w", errors.ErrMarshal{Err: errMarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(res)</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package handlers
+
+import (
+        "encoding/json"
+        "fmt"
+        "io/ioutil"
+        "net/http"
+        "redditclone/pkg/errors"
+        "redditclone/pkg/frontendMessages"
+        "redditclone/pkg/middleware"
+        "redditclone/pkg/post"
+        "redditclone/pkg/token"
+        "redditclone/pkg/user"
+        "time"
+
+        "github.com/gorilla/mux"
+)
+
+func (h *PostHandler) PostAdd(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        body, _ := ioutil.ReadAll(r.Body)
+        usr, ok := r.Context().Value(middleware.UserContextKey).(user.User)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.UserContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">pst := post.Post{}
+        errUnmarshal := json.Unmarshal([]byte(body), &amp;pst)
+        if errUnmarshal != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAdd: %w", errors.ErrUnmarshalRequest{Err: errUnmarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst.Author = usr
+        pst.Time = time.Now().Format(time.RFC3339)
+        pst.Votes = []frontendMessages.Vote{{UserID: usr.UserID, Vote: 1}}
+        pst.GetVotes()
+        errAdd := h.PostRepo.Add(&amp;pst)
+        if errAdd != nil </span><span class="cov8" title="1">{
+                h.Logger.Errorf("can`t add post to database: %s", errAdd)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">h.Logger.Debugf("adding post with id: %d", pst.ID)
+        pstStr, errConvJson := json.Marshal(pst)
+        if errConvJson != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postAdd: %w", errors.ErrMarshal{Err: errConvJson}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(pstStr)</span>
+}
+
+func (h *PostHandler) PostGet(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        id, errGet := token.GetMapItemUint64(vars, "post_id")
+        h.Logger.Debugf("getting post with id: %d", id)
+        if errGet != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postGet: %w", errors.ErrRequest{Err: errGet}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">if !h.PostRepo.Lock(id) </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "post not found",
+                        http.StatusNotFound,
+                        h.Logger, "postGet",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst, errGet := h.PostRepo.Get(id)
+        if errGet != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(id)
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postGet: %w", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst.Views++
+        errUpdate := h.PostRepo.Update(pst)
+        if errUpdate != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(id)
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postGet: %w", errUpdate),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">ok := h.PostRepo.Unlock(id)
+        if !ok </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postGet: %w", fmt.Errorf("can`t unlock post")),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pstJson, err := json.Marshal(pst)
+        if err != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postGet: %w", errors.ErrMarshal{Err: err}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(pstJson)</span>
+}
+
+func (h *PostHandler) Posts(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        postsStr, err := h.PostRepo.ToJson("", "")
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("login: %w", errors.ErrMarshal{Err: err}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(postsStr)</span>
+}
+
+func (h *PostHandler) Categories(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        category, errGet := token.GetMapItemString(vars, "category_name")
+        if errGet != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("Categories: %w", errors.ErrRequest{Err: errGet}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">postsStr, err := h.PostRepo.ToJson(category, "")
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("Categories: %w", errors.ErrMarshal{Err: err}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write([]byte(postsStr))</span>
+}
+
+func (h *PostHandler) UserPosts(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        username, errGet := token.GetMapItemString(vars, "user_login")
+        if errGet != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("UserPosts: %W", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">postsStr, err := h.PostRepo.ToJson("", username)
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("UserPosts: %w", errors.ErrMarshal{Err: err}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write([]byte(postsStr))</span>
+}
+
+func (h *PostHandler) PostRemove(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        vars := mux.Vars(r)
+        idPost, errGet := token.GetMapItemUint64(vars, "post_id")
+        if errGet != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("PostRemove: %W", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">usr, ok := r.Context().Value(middleware.UserContextKey).(user.User)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.UserContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">if !h.PostRepo.Lock(idPost) </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "post not found",
+                        http.StatusNotFound,
+                        h.Logger, "PostRemove",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">pst, errGet := h.PostRepo.Get(idPost)
+        if errGet != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(idPost)
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRemove: %w", errGet),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">if pst.Author.Username != usr.Username || pst.Author.UserID != usr.UserID </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(idPost)
+                frontendMessages.SendMessage(w,
+                        "this post doesn't belong to this user",
+                        http.StatusNotFound,
+                        h.Logger, "PostRemove",
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">ok = h.PostRepo.Remove(idPost)
+        h.PostRepo.Unlock(idPost)
+        if !ok </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRemove: can`t remove post with id %d", idPost),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">frontendMessages.SendMessage(w,
+                "success",
+                http.StatusOK,
+                h.Logger, "PostRemove",
+        )</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package handlers
+
+import (
+        "encoding/json"
+        "fmt"
+        "io/ioutil"
+        "net/http"
+        "redditclone/pkg/errors"
+        "redditclone/pkg/frontendMessages"
+        "redditclone/pkg/middleware"
+        "redditclone/pkg/session"
+        "redditclone/pkg/token"
+        "redditclone/pkg/user"
+)
+
+type userJson struct {
+        Username string `json:"username"`
+        Password string `json:"password"`
+}
+
+type sendToken struct {
+        Token string `json:"token"`
+}
+
+func (u userJson) ToUser() user.User <span class="cov8" title="1">{
+        return user.User{
+                Username:     u.Username,
+                PasswordHash: user.GetPasswordHash(u.Password),
+                UserID:       0,
+        }
+}</span>
+
+func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        auth, ok := r.Context().Value(middleware.AuthtorizationContextKey).(session.SessionManager)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.AuthtorizationContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">body, _ := ioutil.ReadAll(r.Body)
+        usrJson := userJson{}
+        errUnmarshal := json.Unmarshal(body, &amp;usrJson)
+        if errUnmarshal != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("registration: %w", errors.ErrUnmarshalRequest{Err: errUnmarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">usr := usrJson.ToUser()
+        if _, ok := h.UserRepo.Find(usr.Username); ok </span><span class="cov8" title="1">{
+                res, errMarshal := json.Marshal(frontendMessages.Error{Errors: []frontendMessages.ErrorMessage{{
+                        Location: "body",
+                        Param:    "username",
+                        Value:    usr.Username,
+                        Message:  "already exists",
+                }}})
+                if errMarshal != nil </span><span class="cov0" title="0">{
+                        errors.SendHttpError(
+                                h.Logger, w,
+                                fmt.Errorf("registration: %w", errors.ErrMarshal{Err: errMarshal}),
+                        )
+                        return
+                }</span>
+                <span class="cov8" title="1">http.Error(w, string(res), http.StatusUnprocessableEntity)
+                return</span>
+        }
+        <span class="cov8" title="1">errAdd := h.UserRepo.Add(&amp;usr)
+        if errAdd != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("registration: can`t add user to database: %w", errAdd),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">tokenStr, errToken := token.GetToken(usr, h.SecretKey)
+        if errToken != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("registration: %w", errToken),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">errAuth := auth.AddAuth(w)
+        if errAuth != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("registration: can`t add authorization to database: %w, token: %s", errAuth, tokenStr),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">send, errMarshal := json.Marshal(sendToken{Token: tokenStr})
+        if errMarshal != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("registration: %w", errors.ErrMarshal{Err: errMarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">h.Logger.Infof(`registered user: "%s", userID: "%d"`, usr.Username, usr.UserID)
+        w.WriteHeader(http.StatusCreated)
+        w.Write(send)</span>
+}
+
+func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        auth, ok := r.Context().Value(middleware.AuthtorizationContextKey).(session.SessionManager)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: %s", middleware.AuthtorizationContextKey)
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">body, _ := ioutil.ReadAll(r.Body)
+        usrJson := userJson{}
+        errUnmarshal := json.Unmarshal(body, &amp;usrJson)
+        if errUnmarshal != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("login: %w", errors.ErrUnmarshalRequest{Err: errUnmarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">userGet, ok := h.UserRepo.Find(usrJson.Username)
+        if !ok || userGet.PasswordHash != usrJson.ToUser().PasswordHash </span><span class="cov8" title="1">{
+                var mesg string
+                if !ok </span><span class="cov8" title="1">{
+                        mesg = "user not found"
+                }</span> else<span class="cov8" title="1"> {
+                        mesg = "invalid password"
+                        h.Logger.Debugf("bad login: has password %s, but needed: %s", userGet.PasswordHash, usrJson.ToUser().PasswordHash)
+                }</span>
+                <span class="cov8" title="1">res, errMarshal := json.Marshal(frontendMessages.Message{Message: mesg})
+                if errMarshal != nil </span><span class="cov0" title="0">{
+                        errors.SendHttpError(
+                                h.Logger, w,
+                                fmt.Errorf("login: %w", errors.ErrMarshal{Err: errMarshal}),
+                        )
+                        return
+                }</span>
+                <span class="cov8" title="1">http.Error(w, string(res), http.StatusUnauthorized)
+                return</span>
+        }
+        <span class="cov8" title="1">tokenStr, errToken := token.GetToken(userGet, h.SecretKey)
+        if errToken != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("login: %w", errToken),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">errAuth := auth.AddAuth(w)
+        if errAuth != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("login: can`t add authorization to database: %w", errAuth),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">send, errMarshal := json.Marshal(sendToken{Token: tokenStr})
+        if errMarshal != nil </span><span class="cov0" title="0">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("login: %w", errors.ErrMarshal{Err: errMarshal}),
+                )
+                return
+        }</span>
+        <span class="cov8" title="1">h.Logger.Infof(`login user: "%s", userID: "%d"`, userGet.Username, userGet.UserID)
+        w.WriteHeader(http.StatusCreated)
+        w.Write(send)</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package handlers
+
+import (
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "redditclone/pkg/errors"
+        "redditclone/pkg/frontendMessages"
+        "redditclone/pkg/middleware"
+        "redditclone/pkg/token"
+        "redditclone/pkg/user"
+
+        "github.com/gorilla/mux"
+)
+
+func (h *PostHandler) setVoice(w http.ResponseWriter, r *http.Request, value int) error <span class="cov8" title="1">{
+        usr, ok := r.Context().Value(middleware.UserContextKey).(user.User)
+        if !ok </span><span class="cov8" title="1">{
+                h.Logger.Errorf("no context value: UserContextKey")
+                http.Error(w, "Internal server error", http.StatusInternalServerError)
+                return nil
+        }</span>
+        <span class="cov8" title="1">vars := mux.Vars(r)
+        postID, errGet := token.GetMapItemUint64(vars, "post_id")
+        if errGet != nil </span><span class="cov8" title="1">{
+                return errGet
+        }</span>
+        <span class="cov8" title="1">if !h.PostRepo.Lock(postID) </span><span class="cov8" title="1">{
+                frontendMessages.SendMessage(w,
+                        "post not found",
+                        http.StatusNotFound,
+                        h.Logger, "setVoice",
+                )
+                return nil
+        }</span>
+        <span class="cov8" title="1">flag := value != 0
+        pst, errGet := h.PostRepo.Get(postID)
+        if errGet != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(postID)
+                return errGet
+        }</span>
+        <span class="cov8" title="1">for i, vt := range pst.Votes </span><span class="cov8" title="1">{
+                if vt.UserID == usr.UserID </span><span class="cov8" title="1">{
+                        if flag </span><span class="cov8" title="1">{
+                                flag = false
+                                pst.Votes[i].Vote = value
+                                break</span>
+                        }
+                        <span class="cov8" title="1">pst.Votes = token.RemoveInArr(pst.Votes, uint(i))</span>
+                }
+        }
+        <span class="cov8" title="1">if flag </span><span class="cov8" title="1">{
+                pst.Votes = append(pst.Votes, frontendMessages.Vote{UserID: usr.UserID, Vote: value})
+        }</span>
+        <span class="cov8" title="1">pst.GetVotes()
+        errUpdate := h.PostRepo.Update(pst)
+        if errUpdate != nil </span><span class="cov8" title="1">{
+                h.PostRepo.Unlock(postID)
+                return errUpdate
+        }</span>
+        <span class="cov8" title="1">ok = h.PostRepo.Unlock(postID)
+        if !ok </span><span class="cov8" title="1">{
+                return fmt.Errorf("can`t unlock post")
+        }</span>
+        <span class="cov8" title="1">res, err := json.Marshal(pst)
+        if err != nil </span><span class="cov0" title="0">{
+                return errors.ErrMarshal{Err: err}
+        }</span>
+        <span class="cov8" title="1">w.WriteHeader(http.StatusOK)
+        w.Write(res)
+        return nil</span>
+}
+
+func (h *PostHandler) PostRatingUp(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        err := h.setVoice(w, r, 1)
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRatingUp: %w", err),
+                )
+        }</span>
+}
+
+func (h *PostHandler) PostRatingDown(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        err := h.setVoice(w, r, -1)
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRatingDown: %w", err),
+                )
+        }</span>
+}
+
+func (h *PostHandler) PostRatingDefault(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        err := h.setVoice(w, r, 0)
+        if err != nil </span><span class="cov8" title="1">{
+                errors.SendHttpError(
+                        h.Logger, w,
+                        fmt.Errorf("postRatingDefault: %w", err),
+                )
+        }</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
